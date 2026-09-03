@@ -1,0 +1,46 @@
+﻿openapi: 3.0.0
+info:
+  title: Executive AI-Strategy & Business Case Generator
+  version: 1.0.0
+  description: Генерация бизнес-кейсов для внедрения ИИ-агентов
+
+paths:
+  /api/v1/business-case/generate:
+    post:
+      summary: Генерация бизнес-кейса
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - project_name
+                - current_costs
+              properties:
+                project_name:
+                  type: string
+                current_costs:
+                  type: number
+                team_size:
+                  type: integer
+                time_saved:
+                  type: number
+      responses:
+        '200':
+          description: Успешная генерация
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  executive_summary:
+                    type: string
+                  roi:
+                    type: object
+                  payback_period:
+                    type: number
+                  recommendations:
+                    type: array
+                  measurement:
+                    type: object
