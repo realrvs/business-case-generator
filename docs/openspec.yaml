@@ -1,0 +1,626 @@
+﻿# OpenSpec v1.0.0
+# Business Case Generator - Enterprise Platform for AI Business Cases
+# Сгенерировано: 2026-09-03 09:47:55
+
+metadata:
+  name: Business Case Generator
+  version: 1.0.0
+  description: |
+    Платформа для автоматической генерации бизнес-кейсов с поддержкой Excel-моделей,
+    AI-ассистента и enterprise-функций.
+  repository: https://github.com/realrvs/business-case-generator
+  license: MIT
+  tags:
+    - business-case
+    - ai
+    - excel
+    - enterprise
+    - rag
+
+# ============================================================
+# СИСТЕМНАЯ АРХИТЕКТУРА
+# ============================================================
+system:
+  name: Business Case Generator Platform
+  architecture: microservices
+  components:
+    - name: FastAPI Backend
+      port: 8000
+      description: Основной API сервер
+    - name: Streamlit UI
+      port: 8501
+      description: Пользовательский интерфейс (будет заменен на React)
+    - name: Celery Worker
+      port: internal
+      description: Асинхронная обработка задач
+    - name: PostgreSQL
+      port: 5432
+      description: Основная база данных
+    - name: Redis
+      port: 6379
+      description: Кэш и брокер сообщений
+    - name: Qdrant
+      port: 6333
+      description: Векторная база данных для RAG
+    - name: MinIO
+      port: 9000
+      description: S3-совместимое хранилище файлов
+
+  dependencies:
+    - python: ">=3.12"
+    - docker: ">=24.0"
+    - docker-compose: ">=2.0"
+
+# ============================================================
+# АПИ ЭНДПОИНТЫ
+# ============================================================
+apis:
+  # ----------------------------------------
+  # ГРУППА: Business Case Generation
+  # ----------------------------------------
+  - group: Business Case
+    description: Генерация бизнес-кейсов и расчет ROI
+    endpoints:
+      - path: /api/v1/generate
+        method: POST
+        summary: Генерация бизнес-кейса
+        description: |
+          Создает полный бизнес-кейс на основе входных данных.
+          Включает ROI-расчеты, AI-рекомендации и 4-квадрантную оценку.
+        request:
+          body:
+            content-type: application/json
+            schema:
+              type: object
+              required:
+                - project_name
+                - current_costs
+                - team_size
+                - time_saved
+              properties:
+                project_name:
+                  type: string
+                  example: "Внедрение AI-агента в поддержку"
+                current_costs:
+                  type: number
+                  example: 300000
+                  description: Текущие затраты в рублях
+                team_size:
+                  type: integer
+                  example: 3
+                  description: Размер команды
+                time_saved:
+                  type: number
+                  example: 80
+                  description: Экономия времени в % (0-100)
+                hourly_rate:
+                  type: number
+                  example: 2000
+                  description: Стоимость часа работы (руб)
+        responses:
+          200:
+            description: Бизнес-кейс успешно сгенерирован
+            schema:
+              type: object
+              properties:
+                summary:
+                  type: string
+                  description: Краткая сводка
+                roi:
+                  type: object
+                  properties:
+                    roi_percentage: number
+                    payback_period: number
+                    monthly_savings: number
+                    ai_costs: number
+                recommendations:
+                  type: array
+                  items: string
+                assessment:
+                  type: object
+                  description: 4-квадрантная оценка
+                analysis:
+                  type: object
+                  description: Детальный анализ
+          400:
+            description: Некорректные входные данные
+          500:
+            description: Ошибка сервера
+
+      - path: /api/v1/roi/calculate
+        method: POST
+        summary: Расчет ROI
+        description: Быстрый расчет ROI без полной генерации
+        request:
+          body:
+            content-type: application/json
+            schema:
+              type: object
+              required:
+                - current_costs
+                - team_size
+                - time_saved
+              properties:
+                current_costs: { type: number }
+                team_size: { type: integer }
+                time_saved: { type: number }
+                hourly_rate: { type: number }
+        responses:
+          200:
+            description: ROI рассчитан
+            schema:
+              type: object
+              properties:
+                roi_percentage: { type: number }
+                payback_period: { type: number }
+                monthly_savings: { type: number }
+                annual_savings: { type: number }
+                ai_costs: { type: number }
+                total_investment: { type: number }
+
+  # ----------------------------------------
+  # ГРУППА: Excel Integration
+  # ----------------------------------------
+  - group: Excel
+    description: Работа с Excel-моделями компаний
+    endpoints:
+      - path: /api/v1/excel/analyze
+        method: POST
+        summary: Анализ Excel-модели
+        description: |
+          Загружает Excel-файл, извлекает структуру и маппит ячейки
+          с помощью YandexGPT.
+        request:
+          body:
+            content-type: multipart/form-data
+            schema:
+              type: object
+              properties:
+                file:
+                  type: file
+                  description: Excel файл (.xlsx, .xls)
+        responses:
+          200:
+            description: Структура извлечена и замаплена
+            schema:
+              type: object
+              properties:
+                structure:
+                  type: object
+                  description: Структура листов и ячеек
+                mapping:
+                  type: object
+                  description: Маппинг ячеек (входы/выходы)
+                cells:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      sheet: string
+                      cell: string
+                      value: any
+                      description: string
+
+      - path: /api/v1/excel/calculate
+        method: POST
+        summary: Расчет Excel-модели
+        description: |
+          Подставляет данные в Excel-модель и пересчитывает формулы
+          с использованием LibreOffice.
+        request:
+          body:
+            content-type: application/json
+            schema:
+              type: object
+              required:
+                - file_id
+              properties:
+                file_id:
+                  type: string
+                  description: ID загруженного файла
+                data:
+                  type: object
+                  description: Данные для подстановки
+        responses:
+          200:
+            description: Модель пересчитана
+            schema:
+              type: object
+              properties:
+                results:
+                  type: object
+                  description: Результаты расчетов
+                output_cells:
+                  type: object
+                  description: Значения выходных ячеек
+
+      - path: /api/v1/excel/async/analyze
+        method: POST
+        summary: Асинхронный анализ Excel
+        description: |
+          Запускает анализ Excel-файла в фоновом режиме.
+          Возвращает task_id для отслеживания статуса.
+        responses:
+          202:
+            description: Задача принята в обработку
+            schema:
+              type: object
+              properties:
+                task_id:
+                  type: string
+                  description: ID для отслеживания
+                status_url:
+                  type: string
+                  description: URL для проверки статуса
+
+      - path: /api/v1/excel/status/{task_id}
+        method: GET
+        summary: Статус задачи
+        responses:
+          200:
+            description: Статус задачи
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  enum: [PENDING, PROCESSING, COMPLETED, FAILED]
+                result:
+                  type: object
+                  description: Результат (если завершена)
+
+      - path: /ws/excel/{task_id}
+        method: WebSocket
+        summary: WebSocket уведомления
+        description: |
+          Получение push-уведомлений о готовности результатов
+          через WebSocket.
+
+  # ----------------------------------------
+  # ГРУППА: Chat & RAG
+  # ----------------------------------------
+  - group: Chat
+    description: Умный чат с документацией
+    endpoints:
+      - path: /api/v1/chat/start
+        method: POST
+        summary: Начать сессию чата
+        responses:
+          200:
+            description: Сессия создана
+            schema:
+              type: object
+              properties:
+                session_id: { type: string }
+                context: { type: object }
+
+      - path: /api/v1/chat/message
+        method: POST
+        summary: Отправить сообщение
+        description: |
+          Отправляет сообщение в чат. Использует RAG для поиска
+          по документации и контексту.
+        request:
+          body:
+            content-type: application/json
+            schema:
+              type: object
+              required:
+                - session_id
+                - message
+              properties:
+                session_id: { type: string }
+                message: { type: string }
+                context:
+                  type: object
+                  description: Дополнительный контекст
+        responses:
+          200:
+            description: Ответ сгенерирован
+            schema:
+              type: object
+              properties:
+                response: { type: string }
+                sources:
+                  type: array
+                  items: { type: string }
+                  description: Источники из RAG
+                confidence: { type: number }
+
+  # ----------------------------------------
+  # ГРУППА: Health & Monitoring
+  # ----------------------------------------
+  - group: System
+    description: Системные эндпоинты
+    endpoints:
+      - path: /health
+        method: GET
+        summary: Проверка здоровья сервиса
+        responses:
+          200:
+            description: Сервис работает
+            schema:
+              type: object
+              properties:
+                status: { type: string, example: "ok" }
+                timestamp: { type: string }
+                version: { type: string }
+
+      - path: /metrics
+        method: GET
+        summary: Prometheus метрики
+        description: Метрики для мониторинга
+
+# ============================================================
+# БАЗЫ ДАННЫХ
+# ============================================================
+databases:
+  - name: PostgreSQL
+    type: relational
+    version: "15"
+    tables:
+      - name: business_cases
+        description: Сохраненные бизнес-кейсы
+        schema: |
+          id UUID PRIMARY KEY,
+          project_name VARCHAR(255),
+          data JSONB,
+          created_at TIMESTAMP,
+          user_id VARCHAR(100)
+      - name: chat_sessions
+        description: Сессии чата
+        schema: |
+          id UUID PRIMARY KEY,
+          user_id VARCHAR(100),
+          context JSONB,
+          created_at TIMESTAMP,
+          updated_at TIMESTAMP
+      - name: audit_log
+        description: Аудит действий
+        schema: |
+          id UUID PRIMARY KEY,
+          user_id VARCHAR(100),
+          action VARCHAR(50),
+          resource VARCHAR(100),
+          details JSONB,
+          timestamp TIMESTAMP
+      - name: excel_files
+        description: Загруженные Excel-файлы
+        schema: |
+          id UUID PRIMARY KEY,
+          original_name VARCHAR(255),
+          stored_path VARCHAR(500),
+          structure JSONB,
+          mapping JSONB,
+          uploaded_at TIMESTAMP
+
+  - name: Redis
+    type: key-value
+    version: "7.0"
+    use_cases:
+      - Кэширование результатов
+      - Брокер для Celery
+      - Хранение сессий
+
+  - name: Qdrant
+    type: vector
+    version: "1.7"
+    collections:
+      - name: documents
+        description: Эмбеддинги документации
+        vector_size: 768
+        distance: Cosine
+
+# ============================================================
+# БЕЗОПАСНОСТЬ
+# ============================================================
+security:
+  auth:
+    provider: Keycloak
+    type: OAuth2.0 / OpenID Connect
+    flows:
+      - authorization_code
+      - password
+    scopes:
+      - read:cases
+      - write:cases
+      - admin:system
+
+  roles:
+    - name: Admin
+      permissions: ["*"]
+    - name: Project Manager
+      permissions: ["read:cases", "write:cases", "read:reports"]
+    - name: Analyst
+      permissions: ["read:cases", "write:cases"]
+
+  rbac:
+    middleware: true
+    audit_trail: true
+    optimistic_locking: true
+
+# ============================================================
+# РАЗВЕРТЫВАНИЕ
+# ============================================================
+deployment:
+  development:
+    type: docker-compose
+    services:
+      - backend: { port: 8000 }
+      - ui: { port: 8501 }
+      - postgres: { port: 5432 }
+      - redis: { port: 6379 }
+      - qdrant: { port: 6333 }
+      - minio: { port: 9000 }
+    command: docker-compose up -d
+
+  staging:
+    type: docker-compose
+    environment: staging
+    replicas: 2
+
+  production:
+    type: kubernetes
+    helm_chart: ./kubernetes
+    scaling: horizontal
+    resources:
+      limits:
+        cpu: "2"
+        memory: "4Gi"
+    replicas: 3
+    monitoring:
+      - prometheus
+      - grafana
+      - loki
+
+# ============================================================
+# КОНВЕНЦИИ РАЗРАБОТКИ
+# ============================================================
+development:
+  code_style: black (line-length 100)
+  imports: isort
+  linting: flake8
+  type_checking: mypy
+  testing: pytest
+  coverage: ">=80%"
+  git_hooks: pre-commit
+
+  branching:
+    main: production-ready code
+    develop: integration branch
+    feature/*: new features
+    fix/*: bug fixes
+    release/*: release preparation
+
+  commit_convention: conventional-commits
+  pr_template: .github/PULL_REQUEST_TEMPLATE.md
+
+# ============================================================
+# ДОРОЖНАЯ КАРТА
+# ============================================================
+roadmap:
+  - phase: Foundation
+    weeks: "0-1"
+    tasks:
+      - Настройка окружения (Docker, Python)
+      - Структура проекта
+      - FastAPI + Streamlit базовые
+      - CI/CD
+
+  - phase: Core MVP
+    weeks: "1-3"
+    tasks:
+      - BusinessCaseGenerator
+      - ROI Engine
+      - AI Measurement
+      - YandexGPT интеграция
+      - API + UI
+
+  - phase: Excel Integration
+    weeks: "3-5"
+    tasks:
+      - ExcelStructureExtractor
+      - ExcelAIMapper
+      - ExcelROICalculator
+      - LibreOffice интеграция
+
+  - phase: Enterprise Async
+    weeks: "5-7"
+    tasks:
+      - Celery настройка
+      - Async Excel Worker
+      - WebSocket
+      - MinIO интеграция
+
+  - phase: AI & RAG
+    weeks: "7-9"
+    tasks:
+      - Qdrant настройка
+      - RAG Engine
+      - Chat Manager
+      - Local LLM (Llama 3)
+
+  - phase: Security & Production
+    weeks: "9-11"
+    tasks:
+      - Keycloak аутентификация
+      - RBAC
+      - Audit Trail
+      - Prometheus + Grafana
+
+  - phase: Scale & Enterprise
+    weeks: "11-13"
+    tasks:
+      - React SPA
+      - Kubernetes
+      - Horizontal Scaling
+      - Load Testing
+
+# ============================================================
+# ПРИМЕРЫ ЗАПРОСОВ
+# ============================================================
+examples:
+  - name: Generate Business Case
+    request: |
+      curl -X POST http://localhost:8000/api/v1/generate \\
+        -H "Content-Type: application/json" \\
+        -d '{
+          "project_name": "AI Assistant for Support",
+          "current_costs": 500000,
+          "team_size": 5,
+          "time_saved": 70,
+          "hourly_rate": 2500
+        }'
+    response: |
+      {
+        "roi": {
+          "roi_percentage": 215.5,
+          "payback_period": 5.2,
+          "monthly_savings": 350000,
+          "ai_costs": 250000
+        },
+        "recommendations": [
+          "Начать с пилотного проекта",
+          "Обучить команду работе с AI",
+          "Внедрить систему мониторинга"
+        ]
+      }
+
+  - name: Upload Excel
+    request: |
+      curl -X POST http://localhost:8000/api/v1/excel/analyze \\
+        -F "file=@business_model.xlsx"
+    response: |
+      {
+        "file_id": "abc123",
+        "structure": {
+          "sheets": ["Inputs", "Calculations", "Outputs"],
+          "cells": [...]
+        },
+        "mapping": {...}
+      }
+
+# ============================================================
+# ПОЛЕЗНЫЕ КОМАНДЫ
+# ============================================================
+commands:
+  setup: |
+    docker-compose up -d
+    poetry install
+    python -m src.main
+
+  test: |
+    pytest tests/ -v --cov=src
+
+  lint: |
+    black src/ tests/
+    flake8 src/ tests/
+    mypy src/
+
+  migrate: |
+    alembic revision --autogenerate -m "description"
+    alembic upgrade head
+
+  build: |
+    docker build -t business-case-generator:latest .
+    docker-compose up -d

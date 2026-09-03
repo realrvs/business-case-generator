@@ -1,152 +1,255 @@
 ﻿# -*- coding: utf-8 -*-
+"""
+Business Case Generator - Streamlit UI
+"""
 import streamlit as st
 import requests
 import json
 from datetime import datetime
 
-st.set_page_config(page_title="Генератор бизнес-кейсов", page_icon="📊", layout="wide")
-st.markdown("""
-<style>
-    .main-header { font-size: 2.5rem; font-weight: 700; color: #1a5276; }
-    .sub-header { font-size: 1.2rem; color: #5d6d7e; margin-bottom: 2rem; }
-    .metric-card { background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); border-radius: 10px; padding: 1rem; text-align: center; border-left: 4px solid #1a5276; }
-    .metric-value { font-size: 1.8rem; font-weight: 700; color: #1a5276; }
-    .metric-label { font-size: 0.9rem; color: #5d6d7e; }
-    .chat-message-user { background: #e3f2fd; padding: 0.8rem 1.2rem; border-radius: 10px; margin: 0.5rem 0; border-left: 4px solid #1976d2; }
-    .chat-message-assistant { background: #f5f5f5; padding: 0.8rem 1.2rem; border-radius: 10px; margin: 0.5rem 0; border-left: 4px solid #757575; }
-    .chat-container { max-height: 400px; overflow-y: auto; background: #fafafa; padding: 1rem; border-radius: 10px; border: 1px solid #e0e0e0; }
-    .excel-result { background: #d4edda; padding: 1rem; border-radius: 10px; border: 2px solid #28a745; margin-top: 1rem; }
-    .footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid #e9ecef; text-align: center; color: #95a5a6; font-size: 0.8rem; }
-</style>
-""", unsafe_allow_html=True)
+# Настройка страницы
+st.set_page_config(
+    page_title="Business Case Generator",
+    page_icon="📊",
+    layout="wide"
+)
 
-st.markdown('<p class="main-header">🚀 Генератор бизнес-кейсов</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-header">AI-помощник для создания бизнес-кейсов по внедрению ИИ-агентов</p>', unsafe_allow_html=True)
+# Заголовок
+st.title("🚀 Business Case Generator")
+st.markdown("### Генерация бизнес-кейсов с AI-аналитикой")
 
+# Боковая панель с информацией
 with st.sidebar:
-    st.header("⚙️ Настройки")
-    api_url = st.text_input("URL API", value="http://localhost:8001/api/v1")
-    st.markdown("---")
-    st.caption(f"Версия 3.0.0\n{datetime.now().strftime('%d.%m.%Y')}")
+    st.header("📋 Информация")
+    st.markdown("""
+    **Версия:** 1.0.0  
+    **Этап:** Core MVP  
+    **Статус:** ✅ Активен
+    """)
+    
+    st.divider()
+    
+    st.subheader("🔗 API Статус")
+    try:
+        response = requests.get("http://localhost:8000/health", timeout=2)
+        if response.status_code == 200:
+            st.success("✅ API работает")
+        else:
+            st.warning("⚠️ API недоступен")
+    except:
+        st.error("❌ API не отвечает")
 
+# Основная форма
 st.header("📝 Введите данные проекта")
+
 col1, col2 = st.columns(2)
+
 with col1:
-    project_name = st.text_input("Название проекта *", value="Автоматизация IT-поддержки")
-    current_costs = st.number_input("💰 Текущие затраты (руб/мес)", min_value=0, value=300000, step=50000)
-    team_size = st.number_input("👥 Размер команды", min_value=1, value=3, step=1)
-with col2:
-    time_saved = st.number_input("⏱️ Экономия времени (часов/мес)", min_value=0, value=80, step=10)
-    hourly_rate = st.number_input("💵 Стоимость часа работы (руб)", min_value=0, value=2000, step=500)
+    project_name = st.text_input(
+        "Название проекта",
+        placeholder="Введите название проекта",
+        help="Например: Внедрение AI-агента в поддержку"
+    )
+    
+    current_costs = st.number_input(
+        "💰 Текущие затраты (руб)",
+        min_value=0,
+        value=300000,
+        step=10000,
+        help="Текущие затраты на процесс"
+    )
+    
+    team_size = st.number_input(
+        "👥 Размер команды",
+        min_value=1,
+        value=3,
+        step=1,
+        help="Количество сотрудников в команде"
+    )
 
-col1, col2, col3 = st.columns([1, 2, 1])
 with col2:
-    generate = st.button("🚀 Сгенерировать бизнес-кейс", type="primary", use_container_width=True)
+    time_saved = st.slider(
+        "⏱️ Экономия времени (%)",
+        min_value=0,
+        max_value=100,
+        value=80,
+        help="Ожидаемая экономия времени в процентах"
+    )
+    
+    hourly_rate = st.number_input(
+        "💵 Стоимость часа работы (руб)",
+        min_value=500,
+        value=2000,
+        step=100,
+        help="Средняя стоимость часа работы сотрудника"
+    )
 
-if generate:
+# Кнопка генерации
+st.divider()
+generate_button = st.button(
+    "🚀 Сгенерировать бизнес-кейс",
+    type="primary",
+    use_container_width=True
+)
+
+# Результаты
+if generate_button:
     if not project_name:
-        st.error("❌ Введите название проекта")
-        st.stop()
-    with st.spinner("🔄 Генерация..."):
-        try:
-            payload = {"project_name": project_name, "current_costs": current_costs, "team_size": team_size, "time_saved": time_saved, "hourly_rate": hourly_rate}
-            response = requests.post(f"{api_url}/business-case/generate", json=payload, headers={"Content-Type": "application/json"}, timeout=30)
-            if response.status_code == 200:
-                result = response.json()
-                st.session_state['result'] = result
-                st.session_state['project_name'] = project_name
-                st.rerun()
-            else:
-                st.error(f"❌ Ошибка: {response.status_code}")
-        except Exception as e:
-            st.error(f"❌ Ошибка: {str(e)}")
-
-if 'result' in st.session_state:
-    result = st.session_state['result']
-    project_name = st.session_state['project_name']
-    st.success("✅ Бизнес-кейс сгенерирован!")
-    st.info(result.get("summary", "Нет данных"))
-    roi_data = result.get("roi", {})
-    roi_percentage = roi_data.get('roi_percentage', 0)
-    col1, col2, col3, col4 = st.columns(4)
-    with col1: st.metric("ROI", f"{roi_percentage:.1f}%")
-    with col2: st.metric("Окупаемость", f"{roi_data.get('payback_period', 0):.1f} мес")
-    with col3: st.metric("Экономия/мес", f"{roi_data.get('monthly_savings', 0):,.0f} ₽")
-    with col4: st.metric("Затраты на ИИ", f"{roi_data.get('ai_costs', 0):,.0f} ₽/мес")
-    
-    st.markdown("---")
-    st.header("💬 Чат с AI-ассистентом")
-    if "chat_started" not in st.session_state:
-        try:
-            start_response = requests.post(f"{api_url}/business-case/chat/start", json={"project_name": project_name, "business_case": result}, headers={"Content-Type": "application/json"}, timeout=10)
-            if start_response.status_code == 200:
-                chat_data = start_response.json()
-                st.session_state['chat_started'] = True
-                st.session_state['chat_history'] = chat_data.get("history", [])
-        except Exception as e:
-            st.error(f"❌ Ошибка чата: {str(e)}")
-    if "chat_history" in st.session_state:
-        st.markdown('<div class="chat-container">', unsafe_allow_html=True)
-        for msg in st.session_state['chat_history']:
-            role = msg.get("role", "")
-            content = msg.get("content", "")
-            if role == "user":
-                st.markdown(f'<div class="chat-message-user">👤 {content}</div>', unsafe_allow_html=True)
-            else:
-                st.markdown(f'<div class="chat-message-assistant">🤖 {content}</div>', unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
-    with st.container():
-        col1, col2 = st.columns([4, 1])
-        with col1:
-            user_message = st.text_input("Введите сообщение", key="chat_input")
-        with col2:
-            send_button = st.button("📤 Отправить")
-    if send_button and user_message:
-        try:
-            response = requests.post(f"{api_url}/business-case/chat/message", json={"project_name": project_name, "message": user_message}, headers={"Content-Type": "application/json"}, timeout=30)
-            if response.status_code == 200:
-                st.session_state['chat_history'] = response.json().get("history", [])
-                st.rerun()
-        except Exception as e:
-            st.error(f"❌ Ошибка: {str(e)}")
-    
-    st.markdown("---")
-    st.header("📊 AI-анализ Excel-модели ROI")
-    uploaded_excel = st.file_uploader("Выберите Excel-файл (.xlsx, .xls)", type=['xlsx', 'xls'], key="excel_upload")
-    if uploaded_excel and st.button("🧠 Анализировать с AI", key="analyze_excel_ai"):
-        with st.spinner("🔄 AI анализирует Excel-модель..."):
+        st.error("❌ Пожалуйста, введите название проекта")
+    else:
+        with st.spinner("🔄 Генерация бизнес-кейса..."):
             try:
-                files = {"file": (uploaded_excel.name, uploaded_excel.getvalue())}
-                project_data = {"project_name": project_name, "current_costs": current_costs, "team_size": team_size, "time_saved": time_saved, "hourly_rate": hourly_rate}
-                response = requests.post(f"{api_url}/excel/analyze-with-ai", files=files, data={"project_data": json.dumps(project_data)}, timeout=60)
+                # Подготовка данных
+                data = {
+                    "project_name": project_name,
+                    "current_costs": current_costs,
+                    "team_size": team_size,
+                    "time_saved": time_saved,
+                    "hourly_rate": hourly_rate
+                }
+                
+                # Запрос к API
+                response = requests.post(
+                    "http://localhost:8000/api/v1/generate",
+                    json=data,
+                    timeout=30
+                )
+                
                 if response.status_code == 200:
-                    st.session_state['excel_result'] = response.json()
-                    st.rerun()
+                    result = response.json()
+                    
+                    # Отображение результатов
+                    st.success("✅ Бизнес-кейс успешно сгенерирован!")
+                    
+                    # Вкладки для результатов
+                    tab1, tab2, tab3, tab4 = st.tabs([
+                        "📊 ROI Анализ",
+                        "📝 Рекомендации",
+                        "🎯 4-квадрантная оценка",
+                        "📋 Полный отчет"
+                    ])
+                    
+                    with tab1:
+                        st.subheader("💰 ROI Анализ")
+                        
+                        col1, col2, col3 = st.columns(3)
+                        
+                        with col1:
+                            st.metric(
+                                "ROI",
+                                f"{result['roi']['roi_percentage']}%",
+                                delta="положительный" if result['roi']['roi_percentage'] > 0 else "отрицательный"
+                            )
+                        
+                        with col2:
+                            st.metric(
+                                "Окупаемость",
+                                f"{result['roi']['payback_period']} мес.",
+                                help="Срок окупаемости в месяцах"
+                            )
+                        
+                        with col3:
+                            st.metric(
+                                "Ежемесячная экономия",
+                                f"{result['roi']['monthly_savings']:,.0f} руб.",
+                                help="Экономия в месяц"
+                            )
+                        
+                        st.divider()
+                        
+                        col4, col5 = st.columns(2)
+                        with col4:
+                            st.info(f"**AI затраты:** {result['roi']['ai_costs']:,.0f} руб.")
+                        with col5:
+                            st.info(f"**Годовая экономия:** {result['roi'].get('annual_savings', 0):,.0f} руб.")
+                    
+                    with tab2:
+                        st.subheader("💡 Рекомендации")
+                        
+                        for i, rec in enumerate(result.get('recommendations', []), 1):
+                            st.write(f"**{i}.** {rec}")
+                        
+                        st.divider()
+                        
+                        st.subheader("⚠️ Риски")
+                        for risk in result.get('risks', []):
+                            level = risk.get('level', 'MEDIUM')
+                            if level == 'HIGH':
+                                st.error(f"🔴 **{level}**: {risk.get('description', '')}")
+                            elif level == 'MEDIUM':
+                                st.warning(f"🟡 **{level}**: {risk.get('description', '')}")
+                            else:
+                                st.info(f"🟢 **{level}**: {risk.get('description', '')}")
+                    
+                    with tab3:
+                        st.subheader("🎯 4-квадрантная оценка")
+                        
+                        assessment = result.get('assessment', {})
+                        
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            st.metric("Квадрант", assessment.get('quadrant', 'Не определен'))
+                            
+                            business_value = assessment.get('business_value', {})
+                            st.info(f"**Бизнес-ценность:** {business_value.get('level', 'N/A')}")
+                            st.caption(business_value.get('description', ''))
+                            
+                            roi_potential = assessment.get('roi_potential', {})
+                            st.info(f"**ROI потенциал:** {roi_potential.get('level', 'N/A')}")
+                            st.caption(roi_potential.get('projection', ''))
+                        
+                        with col2:
+                            complexity = assessment.get('implementation_complexity', {})
+                            st.warning(f"**Сложность внедрения:** {complexity.get('level', 'N/A')}")
+                            st.caption(complexity.get('description', ''))
+                            
+                            strategic = assessment.get('strategic_impact', {})
+                            st.warning(f"**Стратегическое влияние:** {strategic.get('level', 'N/A')}")
+                            st.caption(strategic.get('description', ''))
+                    
+                    with tab4:
+                        st.subheader("📋 Полный отчет")
+                        
+                        st.json(result)
+                        
+                        # Кнопка скачать отчет
+                        if st.button("💾 Скачать отчет (JSON)"):
+                            json_str = json.dumps(result, ensure_ascii=False, indent=2)
+                            st.download_button(
+                                label="📥 Скачать",
+                                data=json_str,
+                                file_name=f"business_case_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                                mime="application/json"
+                            )
+                    
+                    # Сводка
+                    st.divider()
+                    st.success(f"📊 Бизнес-кейс для '{project_name}' сгенерирован {datetime.now().strftime('%H:%M:%S')}")
+                    
                 else:
-                    st.error(f"❌ Ошибка: {response.status_code}")
+                    st.error(f"❌ Ошибка API: {response.status_code}")
+                    st.write(response.text)
+                    
+            except requests.exceptions.Timeout:
+                st.error("⏰ Таймаут API. Попробуйте позже.")
             except Exception as e:
                 st.error(f"❌ Ошибка: {str(e)}")
-    if 'excel_result' in st.session_state:
-        excel_result = st.session_state['excel_result']
-        if excel_result.get("success"):
-            st.markdown(f'<div class="excel-result">✅ {excel_result.get("message", "ROI рассчитан")}</div>', unsafe_allow_html=True)
-            col1, col2 = st.columns(2)
-            with col1: st.metric("ROI по Excel-модели", f"{excel_result.get('roi', 0):.2f}%")
-            with col2: st.metric("ROI бизнес-кейса", f"{roi_percentage:.1f}%")
-            with st.expander("📋 Детали маппинга"):
-                st.json(excel_result.get("mapping", {}))
-        else:
-            st.error(f"❌ {excel_result.get('message', 'Ошибка расчета')}")
-    
-    with st.expander("📄 Детали бизнес-кейса"):
-        st.json(result)
-    if st.button("🔄 Новый бизнес-кейс"):
-        for key in ['result', 'project_name', 'chat_started', 'chat_history', 'excel_result']:
-            if key in st.session_state: del st.session_state[key]
-        st.rerun()
 
-st.markdown("""
-<div class="footer">
-    © 2026 Генератор бизнес-кейсов | Версия 3.0.0
-</div>
-""", unsafe_allow_html=True)
+else:
+    st.info("📝 Заполните форму и нажмите 'Сгенерировать бизнес-кейс'")
+    
+    # Пример
+    with st.expander("📖 Пример заполнения"):
+        st.code("""
+        Название проекта: Внедрение AI-агента в поддержку
+        Текущие затраты: 300,000 руб.
+        Размер команды: 3 человека
+        Экономия времени: 80%
+        Стоимость часа: 2,000 руб.
+        """)
+        st.caption("Результат: ROI ~215%, окупаемость ~5 месяцев")
+
+# Footer
+st.divider()
+st.caption("💡 Business Case Generator v1.0.0 | Made with ❤️")

@@ -1,154 +1,170 @@
 ﻿# -*- coding: utf-8 -*-
-from typing import Dict, Any, List
-from src.services.roi_engine import ROIEngine
-from src.services.ai_measurement import AIMeasurement
+"""
+Business Case Generator - основной модуль генерации бизнес-кейсов
+"""
 import logging
-import json
+from typing import Dict, Any, Optional
 from datetime import datetime
-import os
+
+from src.services.roi_engine import ROIEngine
+from src.services.yandex_gpt import YandexGPT
+from src.services.ai_measurement import AIMeasurement
 
 logger = logging.getLogger(__name__)
 
 class BusinessCaseGenerator:
+    """
+    Генератор бизнес-кейсов с поддержкой AI-рекомендаций
+    """
+    
     def __init__(self):
         self.roi_engine = ROIEngine()
-        self.measurement = AIMeasurement()
-        self.feedback_file = "feedback.json"
-    
-    def generate(self, project_data: Dict[str, Any]) -> Dict[str, Any]:
-        roi = self.roi_engine.calculate(project_data)
-        measurement = self.measurement.calculate(project_data)
+        self.yandex_gpt = YandexGPT()
+        self.ai_measurement = AIMeasurement()
         
-        result = {
-            "project_name": project_data.get("project_name", "Unknown Project"),
-            "summary": self._generate_summary(project_data, roi),
-            "roi": roi,
-            "measurement": measurement,
-            "recommendations": self._generate_recommendations(project_data, roi, measurement),
-            "risks": self._identify_risks(project_data, roi),
-            "implementation_plan": self._generate_implementation_plan(project_data, roi),
-            "feedback": {
-                "status": "pending",  # pending, approved, rejected, revised
-                "rating": None,       # 1-5
-                "comment": None,
-                "approved_by": None,
-                "approved_at": None,
-                "revision_notes": None
-            }
-        }
+    def generate(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Генерация полного бизнес-кейса
         
-        return result
-    
-    def save_feedback(self, project_name: str, feedback_data: Dict[str, Any]) -> bool:
+        Args:
+            data: Входные данные
+                - project_name: Название проекта
+                - current_costs: Текущие затраты (руб)
+                - team_size: Размер команды
+                - time_saved: Экономия времени (%)
+                - hourly_rate: Стоимость часа работы (руб)
+                
+        Returns:
+            Dict с полным бизнес-кейсом
+        """
         try:
-            # Загружаем существующие отзывы
-            feedbacks = self._load_feedbacks()
+            # 1. Расчет ROI
+            roi_result = self.roi_engine.calculate(data)
+            logger.info(f"ROI рассчитан: {roi_result['roi_percentage']}%")
             
-            # Находим или создаем запись
-            existing = None
-            for item in feedbacks:
-                if item.get("project_name") == project_name:
-                    existing = item
-                    break
+            # 2. AI-рекомендации через YandexGPT
+            ai_recommendations = self._get_ai_recommendations(data, roi_result)
             
-            if existing:
-                existing["feedback"] = feedback_data
-                existing["updated_at"] = datetime.now().isoformat()
-            else:
-                feedbacks.append({
-                    "project_name": project_name,
-                    "feedback": feedback_data,
-                    "created_at": datetime.now().isoformat(),
-                    "updated_at": datetime.now().isoformat()
-                })
+            # 3. 4-квадрантная оценка
+            assessment = self.ai_measurement.assess(data, roi_result)
             
-            self._save_feedbacks(feedbacks)
-            logger.info(f"✅ Обратная связь сохранена для проекта {project_name}")
-            return True
+            # 4. Формирование сводки
+            summary = self._generate_summary(data, roi_result, assessment)
+            
+            # 5. Сборка результата
+            result = {
+                'project_name': data.get('project_name', 'Бизнес-кейс'),
+                'generated_at': datetime.now().isoformat(),
+                'summary': summary,
+                'roi': roi_result,
+                'recommendations': ai_recommendations.get('recommendations', []),
+                'risks': ai_recommendations.get('risks', []),
+                'assessment': assessment,
+                'analysis': self._generate_analysis(data, roi_result, assessment),
+                'implementation_plan': ai_recommendations.get('implementation_plan', 
+                    '1. Начать с пилотного проекта\n2. Внедрить систему мониторинга\n3. Масштабировать на всю команду'),
+                'kpis': {
+                    'roi_target': f"> {roi_result['roi_percentage'] + 20}%",
+                    'payback_period': f"{roi_result['payback_period']} месяцев",
+                    'monthly_savings': roi_result['monthly_savings']
+                }
+            }
+            
+            logger.info(f"Бизнес-кейс для '{result['project_name']}' сгенерирован")
+            return result
+            
         except Exception as e:
-            logger.error(f"❌ Ошибка сохранения обратной связи: {e}")
-            return False
+            logger.error(f"Ошибка генерации бизнес-кейса: {e}")
+            return self._generate_fallback(data)
     
-    def get_feedback(self, project_name: str) -> Dict[str, Any]:
-        feedbacks = self._load_feedbacks()
-        for item in feedbacks:
-            if item.get("project_name") == project_name:
-                return item.get("feedback", {})
-        return {}
+    def _get_ai_recommendations(self, data: Dict, roi_result: Dict) -> Dict:
+        """Получение AI-рекомендаций через YandexGPT"""
+        try:
+            if self.yandex_gpt.is_available:
+                return self.yandex_gpt.generate_business_case(data, roi_result)
+            else:
+                logger.warning("YandexGPT недоступен, используются стандартные рекомендации")
+                return self._get_default_recommendations(data, roi_result)
+        except Exception as e:
+            logger.error(f"Ошибка получения AI-рекомендаций: {e}")
+            return self._get_default_recommendations(data, roi_result)
     
-    def _load_feedbacks(self) -> List[Dict]:
-        if os.path.exists(self.feedback_file):
-            try:
-                with open(self.feedback_file, 'r', encoding='utf-8') as f:
-                    return json.load(f)
-            except:
-                return []
-        return []
-    
-    def _save_feedbacks(self, feedbacks: List[Dict]):
-        with open(self.feedback_file, 'w', encoding='utf-8') as f:
-            json.dump(feedbacks, f, ensure_ascii=False, indent=2)
-    
-    def _generate_summary(self, project_data: Dict, roi: Dict) -> str:
-        return f"Внедрение AI-агентов в проект '{project_data.get('project_name')}' обеспечит ROI {roi.get('roi_percentage', 0):.1f}% с периодом окупаемости {roi.get('payback_period', 0):.1f} месяцев."
-    
-    def _generate_recommendations(self, project_data: Dict, roi: Dict, measurement: Dict) -> List[str]:
-        recs = [
+    def _get_default_recommendations(self, data: Dict, roi_result: Dict) -> Dict:
+        """Стандартные рекомендации (fallback)"""
+        team_size = data.get('team_size', 1)
+        roi = roi_result.get('roi_percentage', 0)
+        
+        recommendations = [
             "Начать с пилотного проекта на одном процессе",
             "Внедрить систему мониторинга эффективности",
             "Обучить команду работе с AI-агентами"
         ]
         
-        if roi.get("roi_percentage", 0) > 100:
-            recs.append("Масштабировать решение на другие процессы")
+        if roi > 200:
+            recommendations.append("Рассмотреть расширение на смежные отделы")
+        elif roi > 100:
+            recommendations.append("Масштабировать решение на всю команду")
         
-        if measurement.get("technical", {}).get("accuracy", 0) < 0.8:
-            recs.append("Улучшить качество данных для обучения моделей")
+        risks = [
+            {'level': 'HIGH' if roi < 50 else 'MEDIUM', 
+             'description': 'Сопротивление команды внедрению AI' if roi < 100 else 'Технические риски интеграции'}
+        ]
         
-        return recs
+        return {
+            'recommendations': recommendations,
+            'risks': risks,
+            'implementation_plan': '1. Анализ текущих процессов\n2. Пилотное внедрение\n3. Сбор метрик\n4. Масштабирование'
+        }
     
-    def _identify_risks(self, project_data: Dict, roi: Dict) -> List[Dict]:
-        risks = []
+    def _generate_summary(self, data: Dict, roi_result: Dict, assessment: Dict) -> str:
+        """Генерация краткой сводки"""
+        project_name = data.get('project_name', 'Проект')
+        roi = roi_result.get('roi_percentage', 0)
+        payback = roi_result.get('payback_period', 0)
         
-        if roi.get("roi_percentage", 0) < 50:
-            risks.append({
-                "level": "HIGH",
-                "description": "Низкий ROI — требуется пересмотр подхода"
-            })
+        summary = f"Проект '{project_name}' показывает ROI в размере {roi}% "
+        if payback < 12:
+            summary += f"с окупаемостью менее {payback} месяцев. "
+        else:
+            summary += f"с окупаемостью {payback} месяцев. "
         
-        if project_data.get("team_size", 0) > 10:
-            risks.append({
-                "level": "MEDIUM",
-                "description": "Большая команда — сложность внедрения"
-            })
+        if roi > 100:
+            summary += "Проект имеет высокий потенциал и рекомендуется к реализации."
+        elif roi > 50:
+            summary += "Проект имеет умеренный потенциал, рекомендуется рассмотреть."
+        else:
+            summary += "Проект требует дополнительного анализа."
         
-        if project_data.get("current_costs", 0) < 100000:
-            risks.append({
-                "level": "LOW",
-                "description": "Низкие текущие затраты — экономия может быть незначительной"
-            })
-        
-        return risks
+        return summary
     
-    def _generate_implementation_plan(self, project_data: Dict, roi: Dict) -> str:
-        return """
-**Этап 1: Подготовка (1-2 недели)**
-- Анализ текущих процессов
-- Сбор данных для обучения моделей
-- Формирование команды внедрения
-
-**Этап 2: Пилотный проект (2-4 недели)**
-- Разработка и настройка AI-агентов
-- Тестирование на ограниченном наборе задач
-- Сбор обратной связи
-
-**Этап 3: Масштабирование (1-2 месяца)**
-- Расширение на все процессы
-- Интеграция с существующими системами
-- Обучение сотрудников
-
-**Этап 4: Полное внедрение (1 месяц)**
-- Запуск в промышленную эксплуатацию
-- Мониторинг и оптимизация
-- Достижение целевых показателей ROI
-"""
+    def _generate_analysis(self, data: Dict, roi_result: Dict, assessment: Dict) -> Dict:
+        """Детальный анализ"""
+        return {
+            'investment_analysis': {
+                'total_investment': roi_result.get('total_investment', 0),
+                'ai_costs': roi_result.get('ai_costs', 0),
+                'current_costs': data.get('current_costs', 0)
+            },
+            'savings_analysis': {
+                'monthly_savings': roi_result.get('monthly_savings', 0),
+                'annual_savings': roi_result.get('annual_savings', 0),
+                'time_saved': data.get('time_saved', 0)
+            },
+            'risk_analysis': assessment.get('risks', []),
+            'strategic_value': assessment.get('strategic_value', 'Средняя')
+        }
+    
+    def _generate_fallback(self, data: Dict) -> Dict:
+        """Fallback при ошибке"""
+        return {
+            'project_name': data.get('project_name', 'Бизнес-кейс'),
+            'generated_at': datetime.now().isoformat(),
+            'summary': 'Бизнес-кейс сгенерирован с базовыми расчетами',
+            'roi': self.roi_engine.calculate(data),
+            'recommendations': ['Начать с пилотного проекта', 'Внедрить систему мониторинга'],
+            'risks': [{'level': 'MEDIUM', 'description': 'Риски внедрения'}],
+            'assessment': {'quadrant': 'Анализ выполнен частично'},
+            'analysis': {'status': 'Частичный анализ'},
+            'implementation_plan': '1. Пилот\n2. Анализ\n3. Внедрение',
+            'kpis': {'roi_target': '> 100%', 'payback_period': '< 12 месяцев'}
+        }
