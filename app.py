@@ -1,152 +1,544 @@
 ﻿# -*- coding: utf-8 -*-
+"""
+Business Case Generator - Streamlit UI с поддержкой Excel и LibreOffice
+"""
 import streamlit as st
 import requests
 import json
+import pandas as pd
 from datetime import datetime
+import os
+import tempfile
+import shutil
+import subprocess
 
-st.set_page_config(page_title="Генератор бизнес-кейсов", page_icon="📊", layout="wide")
-st.markdown("""
-<style>
-    .main-header { font-size: 2.5rem; font-weight: 700; color: #1a5276; }
-    .sub-header { font-size: 1.2rem; color: #5d6d7e; margin-bottom: 2rem; }
-    .metric-card { background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); border-radius: 10px; padding: 1rem; text-align: center; border-left: 4px solid #1a5276; }
-    .metric-value { font-size: 1.8rem; font-weight: 700; color: #1a5276; }
-    .metric-label { font-size: 0.9rem; color: #5d6d7e; }
-    .chat-message-user { background: #e3f2fd; padding: 0.8rem 1.2rem; border-radius: 10px; margin: 0.5rem 0; border-left: 4px solid #1976d2; }
-    .chat-message-assistant { background: #f5f5f5; padding: 0.8rem 1.2rem; border-radius: 10px; margin: 0.5rem 0; border-left: 4px solid #757575; }
-    .chat-container { max-height: 400px; overflow-y: auto; background: #fafafa; padding: 1rem; border-radius: 10px; border: 1px solid #e0e0e0; }
-    .excel-result { background: #d4edda; padding: 1rem; border-radius: 10px; border: 2px solid #28a745; margin-top: 1rem; }
-    .footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid #e9ecef; text-align: center; color: #95a5a6; font-size: 0.8rem; }
-</style>
-""", unsafe_allow_html=True)
+# Настройка страницы
+st.set_page_config(
+    page_title="Business Case Generator",
+    page_icon="📊",
+    layout="wide"
+)
 
-st.markdown('<p class="main-header">🚀 Генератор бизнес-кейсов</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-header">AI-помощник для создания бизнес-кейсов по внедрению ИИ-агентов</p>', unsafe_allow_html=True)
+# Заголовок
+st.title("Business Case Generator")
+st.markdown("### Генерация бизнес-кейсов с AI-аналитикой и поддержкой Excel")
 
+# API URL
+API_URL = os.getenv("API_URL", "http://localhost:8000")
+
+# ============================================================
+# ФУНКЦИИ ДЛЯ ПРОВЕРКИ LIBREOFFICE
+# ============================================================
+def check_libreoffice():
+    """Проверка доступности LibreOffice"""
+    # Проверяем конкретный путь
+    custom_paths = [
+        "D:\\downloads\\LibreOffice\\program\\soffice.exe",
+        "C:\\Program Files\\LibreOffice\\program\\soffice.exe",
+        "C:\\Program Files (x86)\\LibreOffice\\program\\soffice.exe",
+    ]
+    
+    for path in custom_paths:
+        if os.path.exists(path):
+            return path
+    
+    # Проверяем через which
+    path = shutil.which('soffice')
+    if path:
+        return path
+    
+    return None
+
+def get_libreoffice_version():
+    """Получение версии LibreOffice"""
+    path = check_libreoffice()
+    if not path:
+        return None
+    
+    try:
+        result = subprocess.run(
+            [path, '--version'],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+    except:
+        pass
+    
+    return None
+
+# Боковая панель
 with st.sidebar:
-    st.header("⚙️ Настройки")
-    api_url = st.text_input("URL API", value="http://localhost:8001/api/v1")
-    st.markdown("---")
-    st.caption(f"Версия 3.0.0\n{datetime.now().strftime('%d.%m.%Y')}")
-
-st.header("📝 Введите данные проекта")
-col1, col2 = st.columns(2)
-with col1:
-    project_name = st.text_input("Название проекта *", value="Автоматизация IT-поддержки")
-    current_costs = st.number_input("💰 Текущие затраты (руб/мес)", min_value=0, value=300000, step=50000)
-    team_size = st.number_input("👥 Размер команды", min_value=1, value=3, step=1)
-with col2:
-    time_saved = st.number_input("⏱️ Экономия времени (часов/мес)", min_value=0, value=80, step=10)
-    hourly_rate = st.number_input("💵 Стоимость часа работы (руб)", min_value=0, value=2000, step=500)
-
-col1, col2, col3 = st.columns([1, 2, 1])
-with col2:
-    generate = st.button("🚀 Сгенерировать бизнес-кейс", type="primary", use_container_width=True)
-
-if generate:
-    if not project_name:
-        st.error("❌ Введите название проекта")
-        st.stop()
-    with st.spinner("🔄 Генерация..."):
-        try:
-            payload = {"project_name": project_name, "current_costs": current_costs, "team_size": team_size, "time_saved": time_saved, "hourly_rate": hourly_rate}
-            response = requests.post(f"{api_url}/business-case/generate", json=payload, headers={"Content-Type": "application/json"}, timeout=30)
-            if response.status_code == 200:
-                result = response.json()
-                st.session_state['result'] = result
-                st.session_state['project_name'] = project_name
-                st.rerun()
-            else:
-                st.error(f"❌ Ошибка: {response.status_code}")
-        except Exception as e:
-            st.error(f"❌ Ошибка: {str(e)}")
-
-if 'result' in st.session_state:
-    result = st.session_state['result']
-    project_name = st.session_state['project_name']
-    st.success("✅ Бизнес-кейс сгенерирован!")
-    st.info(result.get("summary", "Нет данных"))
-    roi_data = result.get("roi", {})
-    roi_percentage = roi_data.get('roi_percentage', 0)
-    col1, col2, col3, col4 = st.columns(4)
-    with col1: st.metric("ROI", f"{roi_percentage:.1f}%")
-    with col2: st.metric("Окупаемость", f"{roi_data.get('payback_period', 0):.1f} мес")
-    with col3: st.metric("Экономия/мес", f"{roi_data.get('monthly_savings', 0):,.0f} ₽")
-    with col4: st.metric("Затраты на ИИ", f"{roi_data.get('ai_costs', 0):,.0f} ₽/мес")
+    st.header("Навигация")
     
-    st.markdown("---")
-    st.header("💬 Чат с AI-ассистентом")
-    if "chat_started" not in st.session_state:
-        try:
-            start_response = requests.post(f"{api_url}/business-case/chat/start", json={"project_name": project_name, "business_case": result}, headers={"Content-Type": "application/json"}, timeout=10)
-            if start_response.status_code == 200:
-                chat_data = start_response.json()
-                st.session_state['chat_started'] = True
-                st.session_state['chat_history'] = chat_data.get("history", [])
-        except Exception as e:
-            st.error(f"❌ Ошибка чата: {str(e)}")
-    if "chat_history" in st.session_state:
-        st.markdown('<div class="chat-container">', unsafe_allow_html=True)
-        for msg in st.session_state['chat_history']:
-            role = msg.get("role", "")
-            content = msg.get("content", "")
-            if role == "user":
-                st.markdown(f'<div class="chat-message-user">👤 {content}</div>', unsafe_allow_html=True)
-            else:
-                st.markdown(f'<div class="chat-message-assistant">🤖 {content}</div>', unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
-    with st.container():
-        col1, col2 = st.columns([4, 1])
-        with col1:
-            user_message = st.text_input("Введите сообщение", key="chat_input")
-        with col2:
-            send_button = st.button("📤 Отправить")
-    if send_button and user_message:
-        try:
-            response = requests.post(f"{api_url}/business-case/chat/message", json={"project_name": project_name, "message": user_message}, headers={"Content-Type": "application/json"}, timeout=30)
-            if response.status_code == 200:
-                st.session_state['chat_history'] = response.json().get("history", [])
-                st.rerun()
-        except Exception as e:
-            st.error(f"❌ Ошибка: {str(e)}")
+    tab = st.radio(
+        "Выберите режим:",
+        ["Бизнес-кейс", "Excel-модель", "О проекте"]
+    )
     
-    st.markdown("---")
-    st.header("📊 AI-анализ Excel-модели ROI")
-    uploaded_excel = st.file_uploader("Выберите Excel-файл (.xlsx, .xls)", type=['xlsx', 'xls'], key="excel_upload")
-    if uploaded_excel and st.button("🧠 Анализировать с AI", key="analyze_excel_ai"):
-        with st.spinner("🔄 AI анализирует Excel-модель..."):
-            try:
-                files = {"file": (uploaded_excel.name, uploaded_excel.getvalue())}
-                project_data = {"project_name": project_name, "current_costs": current_costs, "team_size": team_size, "time_saved": time_saved, "hourly_rate": hourly_rate}
-                response = requests.post(f"{api_url}/excel/analyze-with-ai", files=files, data={"project_data": json.dumps(project_data)}, timeout=60)
-                if response.status_code == 200:
-                    st.session_state['excel_result'] = response.json()
-                    st.rerun()
-                else:
-                    st.error(f"❌ Ошибка: {response.status_code}")
-            except Exception as e:
-                st.error(f"❌ Ошибка: {str(e)}")
-    if 'excel_result' in st.session_state:
-        excel_result = st.session_state['excel_result']
-        if excel_result.get("success"):
-            st.markdown(f'<div class="excel-result">✅ {excel_result.get("message", "ROI рассчитан")}</div>', unsafe_allow_html=True)
-            col1, col2 = st.columns(2)
-            with col1: st.metric("ROI по Excel-модели", f"{excel_result.get('roi', 0):.2f}%")
-            with col2: st.metric("ROI бизнес-кейса", f"{roi_percentage:.1f}%")
-            with st.expander("📋 Детали маппинга"):
-                st.json(excel_result.get("mapping", {}))
+    st.divider()
+    
+    st.subheader("API Статус")
+    try:
+        response = requests.get(f"{API_URL}/health", timeout=2)
+        if response.status_code == 200:
+            st.success("✅ API работает")
         else:
-            st.error(f"❌ {excel_result.get('message', 'Ошибка расчета')}")
+            st.warning("⚠️ API недоступен")
+    except:
+        st.error("❌ API не отвечает")
     
-    with st.expander("📄 Детали бизнес-кейса"):
-        st.json(result)
-    if st.button("🔄 Новый бизнес-кейс"):
-        for key in ['result', 'project_name', 'chat_started', 'chat_history', 'excel_result']:
-            if key in st.session_state: del st.session_state[key]
-        st.rerun()
+    st.divider()
+    
+    # Проверка LibreOffice в сайдбаре
+    st.subheader("LibreOffice Статус")
+    lo_path = check_libreoffice()
+    if lo_path:
+        st.success(f"✅ LibreOffice найден")
+        st.caption(f"Путь: {lo_path}")
+        
+        version = get_libreoffice_version()
+        if version:
+            st.caption(f"Версия: {version}")
+    else:
+        st.error("❌ LibreOffice не найден")
+        st.caption("Формулы НЕ будут пересчитываться")
 
-st.markdown("""
-<div class="footer">
-    © 2026 Генератор бизнес-кейсов | Версия 3.0.0
-</div>
-""", unsafe_allow_html=True)
+# ============================================================
+# РЕЖИМ 1: БИЗНЕС-КЕЙС
+# ============================================================
+if tab == "Бизнес-кейс":
+    st.header("Введите данные проекта")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        project_name = st.text_input(
+            "Название проекта",
+            placeholder="Введите название проекта",
+            help="Например: Внедрение AI-агента в поддержку",
+            key="bc_project_name"
+        )
+        
+        current_costs = st.number_input(
+            "Текущие затраты (руб)",
+            min_value=0,
+            value=300000,
+            step=10000,
+            help="Текущие затраты на процесс",
+            key="bc_current_costs"
+        )
+        
+        team_size = st.number_input(
+            "Размер команды",
+            min_value=1,
+            value=3,
+            step=1,
+            help="Количество сотрудников в команде",
+            key="bc_team_size"
+        )
+    
+    with col2:
+        time_saved = st.slider(
+            "Экономия времени (%)",
+            min_value=0,
+            max_value=100,
+            value=80,
+            help="Ожидаемая экономия времени в процентах",
+            key="bc_time_saved"
+        )
+        
+        hourly_rate = st.number_input(
+            "Стоимость часа работы (руб)",
+            min_value=500,
+            value=2000,
+            step=100,
+            help="Средняя стоимость часа работы сотрудника",
+            key="bc_hourly_rate"
+        )
+    
+    st.divider()
+    generate_button = st.button(
+        "Сгенерировать бизнес-кейс",
+        type="primary",
+        use_container_width=True,
+        key="bc_generate"
+    )
+    
+    if generate_button:
+        if not project_name:
+            st.error("Пожалуйста, введите название проекта")
+        else:
+            with st.spinner("Генерация бизнес-кейса..."):
+                try:
+                    data = {
+                        "project_name": project_name,
+                        "current_costs": current_costs,
+                        "team_size": team_size,
+                        "time_saved": time_saved,
+                        "hourly_rate": hourly_rate
+                    }
+                    
+                    response = requests.post(
+                        f"{API_URL}/api/v1/generate",
+                        json=data,
+                        timeout=30
+                    )
+                    
+                    if response.status_code == 200:
+                        result = response.json()
+                        st.success("Бизнес-кейс успешно сгенерирован!")
+                        
+                        tab1, tab2, tab3, tab4 = st.tabs([
+                            "ROI Анализ",
+                            "Рекомендации",
+                            "4-квадрантная оценка",
+                            "Полный отчет"
+                        ])
+                        
+                        with tab1:
+                            st.subheader("ROI Анализ")
+                            
+                            col1, col2, col3 = st.columns(3)
+                            
+                            with col1:
+                                st.metric(
+                                    "ROI",
+                                    f"{result['roi']['roi_percentage']}%"
+                                )
+                            
+                            with col2:
+                                st.metric(
+                                    "Окупаемость",
+                                    f"{result['roi']['payback_period']} мес."
+                                )
+                            
+                            with col3:
+                                st.metric(
+                                    "Ежемесячная экономия",
+                                    f"{result['roi']['monthly_savings']:,.0f} руб."
+                                )
+                        
+                        with tab2:
+                            st.subheader("Рекомендации")
+                            for i, rec in enumerate(result.get('recommendations', []), 1):
+                                st.write(f"**{i}.** {rec}")
+                            
+                            st.divider()
+                            st.subheader("Риски")
+                            for risk in result.get('risks', []):
+                                level = risk.get('level', 'MEDIUM')
+                                if level == 'HIGH':
+                                    st.error(f"**{level}**: {risk.get('description', '')}")
+                                elif level == 'MEDIUM':
+                                    st.warning(f"**{level}**: {risk.get('description', '')}")
+                                else:
+                                    st.info(f"**{level}**: {risk.get('description', '')}")
+                        
+                        with tab3:
+                            st.subheader("4-квадрантная оценка")
+                            assessment = result.get('assessment', {})
+                            st.info(f"**Квадрант:** {assessment.get('quadrant', 'Не определен')}")
+                            
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                bv = assessment.get('business_value', {})
+                                st.metric("Бизнес-ценность", bv.get('level', 'N/A'))
+                                st.caption(bv.get('description', ''))
+                            
+                            with col2:
+                                roi_pot = assessment.get('roi_potential', {})
+                                st.metric("ROI потенциал", roi_pot.get('level', 'N/A'))
+                                st.caption(roi_pot.get('projection', ''))
+                        
+                        with tab4:
+                            st.subheader("Полный отчет")
+                            st.json(result)
+                            
+                            if st.button("Скачать отчет (JSON)"):
+                                json_str = json.dumps(result, ensure_ascii=False, indent=2)
+                                st.download_button(
+                                    label="Скачать",
+                                    data=json_str,
+                                    file_name=f"business_case_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                                    mime="application/json"
+                                )
+                    else:
+                        st.error(f"Ошибка API: {response.status_code}")
+                        st.write(response.text)
+                        
+                except requests.exceptions.Timeout:
+                    st.error("Таймаут API. Попробуйте позже.")
+                except Exception as e:
+                    st.error(f"Ошибка: {str(e)}")
+
+# ============================================================
+# РЕЖИМ 2: EXCEL-МОДЕЛЬ
+# ============================================================
+elif tab == "Excel-модель":
+    st.header("Работа с Excel-моделью")
+    
+    # Инициализация состояния сессии
+    if 'excel_file_id' not in st.session_state:
+        st.session_state.excel_file_id = None
+        st.session_state.excel_structure = None
+        st.session_state.excel_mapping = None
+    
+    # Настройки LibreOffice
+    st.subheader("Настройки расчета")
+    
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.info("LibreOffice используется для пересчета формул в Excel")
+    with col2:
+        use_libreoffice = st.checkbox(
+            "Использовать LibreOffice",
+            value=True,
+            key="use_libreoffice",
+            help="Отключите, если формулы не требуют пересчета"
+        )
+    
+    # Проверяем доступность LibreOffice
+    lo_path = check_libreoffice()
+    if use_libreoffice:
+        if lo_path:
+            st.success(f"✅ LibreOffice доступен: {lo_path}")
+            version = get_libreoffice_version()
+            if version:
+                st.caption(f"Версия: {version}")
+        else:
+            st.warning("⚠️ LibreOffice не найден. Формулы НЕ будут пересчитаны.")
+            st.caption("📥 Установите LibreOffice: https://www.libreoffice.org/")
+            st.caption("Для Windows: скачайте установщик с сайта")
+            st.caption("Для Linux: sudo apt-get install libreoffice-headless")
+    
+    st.divider()
+    
+    # Шаг 1: Загрузка файла
+    st.subheader("1. Загрузите Excel-файл")
+    
+    uploaded_file = st.file_uploader(
+        "Выберите Excel файл",
+        type=['xlsx', 'xls', 'xlsm'],
+        help="Поддерживаются .xlsx, .xls, .xlsm файлы"
+    )
+    
+    if uploaded_file:
+        if 'uploaded_file_data' not in st.session_state:
+            st.session_state.uploaded_file_data = uploaded_file.getvalue()
+            st.session_state.uploaded_file_name = uploaded_file.name
+    
+    # Кнопка анализа
+    if st.button("Проанализировать Excel", type="primary"):
+        if not uploaded_file and not st.session_state.get('uploaded_file_data'):
+            st.warning("Пожалуйста, загрузите файл")
+        else:
+            with st.spinner("Анализ Excel-файла..."):
+                try:
+                    if uploaded_file:
+                        file_data = uploaded_file.getvalue()
+                        file_name = uploaded_file.name
+                    else:
+                        file_data = st.session_state.uploaded_file_data
+                        file_name = st.session_state.uploaded_file_name
+                    
+                    files = {
+                        'file': (file_name, file_data, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+                    }
+                    
+                    response = requests.post(
+                        f"{API_URL}/api/v1/excel/analyze",
+                        files=files,
+                        timeout=60
+                    )
+                    
+                    if response.status_code == 200:
+                        result = response.json()
+                        
+                        st.session_state.excel_file_id = result['file_id']
+                        st.session_state.excel_structure = result['structure']
+                        st.session_state.excel_mapping = result['mapping']
+                        
+                        st.success("Excel-файл успешно проанализирован!")
+                        
+                        with st.expander("Структура файла", expanded=True):
+                            st.write(f"**Файл:** {result['filename']}")
+                            st.write(f"**Листы:** {', '.join(result['sheets'])}")
+                            
+                            for sheet in result['structure'].get('sheets', []):
+                                st.write(f"**Лист: {sheet['name']}**")
+                                st.write(f"  - Ячеек с данными: {sheet.get('data_cells', 0)}")
+                                st.write(f"  - Формул: {len(sheet.get('formulas', []))}")
+                        
+                        with st.expander("AI-маппинг"):
+                            st.json(result['mapping'])
+                    else:
+                        st.error(f"Ошибка: {response.status_code}")
+                        st.write(response.text)
+                        
+                except Exception as e:
+                    st.error(f"Ошибка: {str(e)}")
+    
+    # Шаг 2: Подстановка данных
+    if st.session_state.excel_file_id:
+        st.divider()
+        st.subheader("2. Введите данные для подстановки")
+        
+        mapping = st.session_state.excel_mapping
+        input_params = {}
+        
+        if mapping and 'inputs' in mapping:
+            for input_item in mapping['inputs']:
+                param_name = input_item.get('name', input_item.get('address', 'Параметр'))
+                param_value = st.number_input(
+                    f"Входной параметр: {param_name}",
+                    value=0.0,
+                    step=1000.0,
+                    help=f"Ячейка: {input_item.get('address', '')}"
+                )
+                input_params[param_name] = param_value
+        
+        if not input_params:
+            st.info("AI-маппинг не выполнен. Введите данные вручную:")
+            
+            structure = st.session_state.excel_structure
+            if structure:
+                for sheet in structure.get('sheets', []):
+                    for cell in sheet.get('cells', [])[:10]:
+                        if cell.get('data_type') != 'formula':
+                            param_name = f"{sheet['name']}!{cell['address']}"
+                            param_value = st.number_input(
+                                f"Входной параметр: {param_name}",
+                                value=float(cell['value']) if isinstance(cell['value'], (int, float)) else 0.0,
+                                step=1000.0
+                            )
+                            input_params[param_name] = param_value
+        
+        if st.button("Рассчитать модель", type="primary"):
+            if not input_params:
+                st.warning("Введите данные для подстановки")
+            else:
+                with st.spinner("Расчет модели..."):
+                    try:
+                        # Проверяем наличие LibreOffice
+                        lo_available = check_libreoffice() is not None
+                        
+                        request_data = {
+                            "file_id": st.session_state.excel_file_id,
+                            "data": input_params,
+                            "mapping": mapping,
+                            "use_libreoffice": use_libreoffice and lo_available
+                        }
+                        
+                        response = requests.post(
+                            f"{API_URL}/api/v1/excel/calculate",
+                            json=request_data,
+                            timeout=60
+                        )
+                        
+                        if response.status_code == 200:
+                            result = response.json()
+                            
+                            st.success("Модель рассчитана!")
+                            
+                            # Информация о LibreOffice
+                            if result.get('libreoffice'):
+                                lo_info = result['libreoffice']
+                                if lo_info.get('formulas_recalculated'):
+                                    st.info("✅ Формулы пересчитаны с помощью LibreOffice")
+                                else:
+                                    st.warning("⚠️ Формулы НЕ были пересчитаны")
+                            
+                            if result.get('output_cells'):
+                                st.subheader("Результаты")
+                                
+                                output_data = []
+                                for cell_key, cell_info in result['output_cells'].items():
+                                    output_data.append({
+                                        'Ячейка': cell_key,
+                                        'Название': cell_info.get('name', ''),
+                                        'Значение': cell_info.get('value', ''),
+                                        'Описание': cell_info.get('description', '')
+                                    })
+                                
+                                if output_data:
+                                    df = pd.DataFrame(output_data)
+                                    st.dataframe(df, use_container_width=True)
+                            
+                            with st.expander("Полные результаты"):
+                                st.json(result)
+                        
+                        else:
+                            st.error(f"Ошибка: {response.status_code}")
+                            st.write(response.text)
+                            
+                    except Exception as e:
+                        st.error(f"Ошибка: {str(e)}")
+        
+        if st.button("Очистить файл"):
+            try:
+                if st.session_state.excel_file_id:
+                    requests.delete(
+                        f"{API_URL}/api/v1/excel/{st.session_state.excel_file_id}"
+                    )
+                
+                st.session_state.excel_file_id = None
+                st.session_state.excel_structure = None
+                st.session_state.excel_mapping = None
+                st.session_state.uploaded_file_data = None
+                st.session_state.uploaded_file_name = None
+                
+                st.success("Файл очищен")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Ошибка при очистке: {str(e)}")
+
+# ============================================================
+# РЕЖИМ 3: О ПРОЕКТЕ
+# ============================================================
+else:
+    st.header("О проекте")
+    
+    st.markdown("""
+    ## Business Case Generator
+    
+    **Платформа для автоматической генерации бизнес-кейсов с AI-аналитикой**
+    
+    ### Возможности
+    
+    - **Генерация бизнес-кейсов** — на основе входных данных
+    - **ROI расчеты** — окупаемость, экономия, инвестиции
+    - **AI-рекомендации** — через YandexGPT
+    - **4-квадрантная оценка** — бизнес-ценность, сложность, ROI, стратегия
+    - **Excel-модели** — загрузка, маппинг, пересчет с LibreOffice
+    
+    ### Технологии
+    
+    - **Backend:** FastAPI, Python 3.12
+    - **UI:** Streamlit
+    - **AI:** YandexGPT
+    - **Excel:** openpyxl, LibreOffice
+    - **Базы:** PostgreSQL, Redis, Qdrant
+    
+    ### Этапы разработки
+    
+    | Этап | Статус |
+    |------|--------|
+    | 0. Foundation | ✅ |
+    | 1. Core MVP | ✅ |
+    | 2. Excel Integration | ✅ |
+    | 3. Enterprise Async | ⏳ |
+    | 4. AI & RAG | ⏳ |
+    | 5. Security & Production | ⏳ |
+    
+    ### Ссылки
+    
+    - [GitHub репозиторий](https://github.com/realrvs/business-case-generator)
+    - [API документация](http://localhost:8000/docs)
+    """)
+
+# Footer
+st.divider()
+st.caption("Business Case Generator v1.0.0 | Made with Love")
